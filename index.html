@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titanic Survival Analysis Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+    <h1>Titanic Analysis Core</h1>
+    <p>Predictive Modeling & Demographic Insights</p>
+</header>
+
+<div class="container">
+    <aside class="sidebar">
+        <h3 style="color: #fff; margin-bottom: 25px;">Global Filters</h3>
+        
+        <div class="filter-group">
+            <label>Passenger Class</label>
+            <select id="filter-pclass">
+                <option value="all">All Classes</option>
+                <option value="1">1st Class (Upper)</option>
+                <option value="2">2nd Class (Middle)</option>
+                <option value="3">3rd Class (Lower)</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Gender</label>
+            <select id="filter-gender">
+                <option value="all">All Genders</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Port of Embarkation</label>
+            <select id="filter-embarked">
+                <option value="all">All Ports</option>
+                <option value="C">Cherbourg (C)</option>
+                <option value="Q">Queenstown (Q)</option>
+                <option value="S">Southampton (S)</option>
+            </select>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="section">
+            <div class="section-header">
+                <h2>Model Evaluation</h2>
+                <span class="badge">Winner: Random Forest</span>
+            </div>
+            
+            <div class="chart-wrapper">
+                <div id="modelComparisonChart" class="chart-container"></div>
+                <div class="story-text">
+                    <strong>Insight:</strong> The Random Forest ensemble algorithm outperformed the others with an AUC of ~0.89, showcasing its robust capability in capturing complex relationships.
+                </div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="rocChart" class="chart-container"></div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="confusionMatrixChart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Key Survival Drivers</h2>
+            </div>
+            <div class="chart-wrapper">
+                <div id="featureImportanceChart" class="chart-container"></div>
+                <div class="story-text">
+                    <strong>Algorithm Weights:</strong> Our model heavily relied on <strong>Sex</strong> (~48% importance) as the strongest divider. Following closely were socioeconomic indicators: <strong>Pclass</strong> and <strong>Fare</strong>.
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Demographic Survival Rates</h2>
+            </div>
+            
+            <div class="chart-wrapper">
+                <div id="genderChart" class="chart-container"></div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="pclassChart" class="chart-container"></div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="embarkedChart" class="chart-container"></div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="ageChart" class="chart-container"></div>
+                <div class="story-text">Children (0-9 years) were highly prioritized, resulting in the highest age-bracket survival rate.</div>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="familyChart" class="chart-container"></div>
+                <div class="story-text">Small groups (1-3 family members) saw the best survival odds compared to traveling alone or in large groups.</div>
+            </div>
+        </div>
+
+        <div class="cta-section">
+            <h2>Beyond the Numbers</h2>
+            <p>The Random Forest model mathematically validates the historical narrative: your gender and the class of your ticket were the ultimate deciders of fate on that freezing night in 1912.</p>
+        </div>
+    </main>
+</div>
+
+<script>
+    const darkLayoutConfig = {
+        font: { color: '#94a3b8', family: 'Inter, sans-serif', size: 13 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        margin: { t: 60, b: 60, l: 60, r: 60 },
+        xaxis: { 
+            gridcolor: 'rgba(255,255,255,0.05)', 
+            zerolinecolor: 'rgba(255,255,255,0.05)',
+            automargin: true 
+        },
+        yaxis: { 
+            gridcolor: 'rgba(255,255,255,0.05)', 
+            zerolinecolor: 'rgba(255,255,255,0.05)',
+            automargin: true 
+        }
+    };
+
+    const staticConfig = { staticPlot: true, displayModeBar: false };
+
+    let rawTitanicData = [];
+    let modelPerfData = [];
+    let featureImpData = [];
+
+    // Helper to round any number up to 3 decimal places max
+    const roundTo3 = (num) => Math.round(num * 1000) / 1000;
+
+    async function loadCSV(filename) {
+        return new Promise((resolve, reject) => {
+            Papa.parse(filename, {
+                download: true,
+                header: true,
+                dynamicTyping: true,
+                complete: (results) => resolve(results.data),
+                error: (error) => reject(error)
+            });
+        });
+    }
+
+    async function initDashboard() {
+        try {
+            rawTitanicData = await loadCSV('dashboard_data/titanic.csv'); 
+            modelPerfData = await loadCSV('dashboard_data/model_performance.csv');
+            featureImpData = await loadCSV('dashboard_data/feature_importances.csv');
+
+            renderModelPerformance(modelPerfData);
+            renderROC(); 
+            renderConfusionMatrix(); 
+            renderFeatureImportance(featureImpData);
+
+            document.getElementById('filter-pclass').addEventListener('change', updateDemographics);
+            document.getElementById('filter-gender').addEventListener('change', updateDemographics);
+            document.getElementById('filter-embarked').addEventListener('change', updateDemographics);
+
+            updateDemographics();
+
+        } catch (err) {
+            console.error("Error loading CSV data.", err);
+        }
+    }
+
+    function updateDemographics() {
+        const pclass = document.getElementById('filter-pclass').value;
+        const gender = document.getElementById('filter-gender').value;
+        const embarked = document.getElementById('filter-embarked').value;
+
+        let filtered = rawTitanicData.filter(row => row.Survived !== undefined && row.Survived !== null && typeof row.Survived === 'number');
+
+        if (pclass !== 'all') filtered = filtered.filter(row => String(row.Pclass) === pclass);
+        if (gender !== 'all') filtered = filtered.filter(row => String(row.Sex).toLowerCase() === gender);
+        if (embarked !== 'all') filtered = filtered.filter(row => String(row.Embarked).toLowerCase() === embarked.toLowerCase());
+
+        renderDemographics(filtered);
+    }
+
+    function calculateSurvival(data, keyExtractor) {
+        const groups = {};
+        data.forEach(row => {
+            const key = keyExtractor(row);
+            if (key === null || key === undefined || key === 'Unknown') return;
+            
+            if (!groups[key]) groups[key] = { survived: 0, total: 0 };
+            groups[key].total++;
+            if (row.Survived === 1) groups[key].survived++;
+        });
+
+        return Object.keys(groups).map(key => ({
+            label: key,
+            // Pre-rounding rates to 3 points
+            rate: roundTo3(groups[key].survived / groups[key].total),
+            total: groups[key].total
+        }));
+    }
+
+    function renderDemographics(data) {
+        const genderData = calculateSurvival(data, row => {
+            if(!row.Sex) return null;
+            return row.Sex.charAt(0).toUpperCase() + row.Sex.slice(1);
+        });
+
+        const pclassData = calculateSurvival(data, row => row.Pclass ? 'Class ' + row.Pclass : null).sort((a,b) => a.label.localeCompare(b.label));
+        const embarkedData = calculateSurvival(data, row => row.Embarked);
+
+        const ageData = calculateSurvival(data, row => {
+            const age = row.Age;
+            if (age === null || age === undefined || typeof age !== 'number') return 'Unknown';
+            if (age < 10) return '0-9';
+            if (age < 20) return '10-19';
+            if (age < 30) return '20-29';
+            if (age < 40) return '30-39';
+            if (age < 50) return '40-49';
+            if (age < 60) return '50-59';
+            return '60+';
+        }).sort((a, b) => a.label.localeCompare(b.label));
+
+        const familyData = calculateSurvival(data, row => {
+            if (row.SibSp === null || row.Parch === null) return 'Unknown';
+            return row.SibSp + row.Parch;
+        }).sort((a, b) => parseInt(a.label) - parseInt(b.label));
+
+        Plotly.newPlot('genderChart', [{
+            values: genderData.map(d => d.rate),
+            labels: genderData.map(d => d.label),
+            type: 'pie', hole: .5,
+            marker: { colors: ['#f43f5e', '#22d3ee'] },
+            textinfo: 'label+percent',
+            textposition: 'inside',
+            textfont: { color: '#fff', size: 14 }
+        }], { ...darkLayoutConfig, title: {text:'Survival Rate by Gender', font:{color:'#fff', size: 18}} }, staticConfig);
+
+        Plotly.newPlot('pclassChart', [{
+            x: pclassData.map(d => d.label), y: pclassData.map(d => d.rate),
+            type: 'bar', marker: { color: '#818cf8' },
+            text: pclassData.map(d => (d.rate * 100).toFixed(1) + '%'),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#fff' }
+        }], { ...darkLayoutConfig, title: {text:'Survival Rate by Passenger Class', font:{color:'#fff', size: 18}}, yaxis:{...darkLayoutConfig.yaxis, range:[0,1.15]} }, staticConfig);
+
+        Plotly.newPlot('embarkedChart', [{
+            x: embarkedData.map(d => d.label), y: embarkedData.map(d => d.rate),
+            type: 'bar', marker: { color: '#3b82f6' },
+            text: embarkedData.map(d => (d.rate * 100).toFixed(1) + '%'),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#fff' }
+        }], { ...darkLayoutConfig, title: {text:'Survival Rate by Port of Embarkation', font:{color:'#fff', size: 18}}, yaxis:{...darkLayoutConfig.yaxis, range:[0,1.15]} }, staticConfig);
+
+        Plotly.newPlot('ageChart', [{
+            x: ageData.map(d => d.label), y: ageData.map(d => d.rate),
+            type: 'bar',
+            marker: { color: ageData.map(d => d.label === '0-9' ? '#f43f5e' : '#334155') },
+            text: ageData.map(d => (d.rate * 100).toFixed(1) + '%'),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#fff' }
+        }], { ...darkLayoutConfig, title: {text:'Survival Rate by Age Group', font:{color:'#fff', size: 18}}, yaxis:{...darkLayoutConfig.yaxis, range:[0,1.15]} }, staticConfig);
+
+        Plotly.newPlot('familyChart', [{
+            x: familyData.map(d => d.label), y: familyData.map(d => d.rate),
+            type: 'bar', marker: { color: '#fbbf24' },
+            text: familyData.map(d => (d.rate * 100).toFixed(1) + '%'),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#fff' }
+        }], { ...darkLayoutConfig, title: {text:'Survival Rate by Family Size', font:{color:'#fff', size: 18}}, xaxis:{...darkLayoutConfig.xaxis, type:'category'}, yaxis:{...darkLayoutConfig.yaxis, range:[0,1.15]} }, staticConfig);
+    }
+
+    function renderModelPerformance(data) {
+        const validData = data.filter(d => d.Model);
+        const models = validData.map(d => d.Model);
+        // Pre-rounding AUC scores to 3 points
+        const aucs = validData.map(d => roundTo3(d.AUC_Score));
+        
+        const colors = models.map(m => m === 'Random Forest' ? '#22d3ee' : '#334155');
+
+        const trace = {
+            x: models, y: aucs, type: 'bar',
+            marker: { color: colors, opacity: 0.9 },
+            text: aucs.map(a => a.toFixed(3)),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#ffffff', size: 14 }
+        };
+
+        const layout = { 
+            ...darkLayoutConfig, 
+            title: { text: 'AUC Score Comparison', font: { color: '#ffffff', size: 18 } },
+            yaxis: { ...darkLayoutConfig.yaxis, title: 'AUC Score', range: [0, 1.15] } 
+        };
+
+        Plotly.newPlot('modelComparisonChart', [trace], layout, staticConfig);
+    }
+
+    function renderROC() {
+        const fpr = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1];
+        const tpr = [0, 0.55, 0.72, 0.82, 0.88, 0.92, 0.95, 0.98, 1];
+
+        const trace1 = {
+            x: fpr, y: tpr, type: 'scatter', mode: 'lines+markers+text',
+            name: 'Random Forest (AUC=0.89)',
+            line: { color: '#f43f5e', width: 3 },
+            fill: 'tozeroy', fillcolor: 'rgba(244, 63, 94, 0.1)',
+            text: tpr.map(val => val.toFixed(3)),
+            textposition: 'top left',
+            cliponaxis: false,
+            textfont: { color: '#f43f5e' }
+        };
+        const trace2 = {
+            x: [0,1], y: [0,1], type: 'scatter', mode: 'lines',
+            name: 'Random Guess',
+            line: { color: '#64748b', dash: 'dash' }
+        };
+
+        const layout = { 
+            ...darkLayoutConfig, 
+            title: { text: 'ROC Curve (Mock Data Demo)', font: { color: '#ffffff', size: 18 } },
+            xaxis: { ...darkLayoutConfig.xaxis, title: 'False Positive Rate' },
+            yaxis: { ...darkLayoutConfig.yaxis, title: 'True Positive Rate' } 
+        };
+
+        Plotly.newPlot('rocChart', [trace1, trace2], layout, staticConfig);
+    }
+
+    function renderConfusionMatrix() {
+        const z = [[136, 29], [17, 86]]; 
+        const x = ['Pred Deceased', 'Pred Survived'];
+        const y = ['Actual Survived', 'Actual Deceased']; 
+
+        const trace = {
+            z: z, x: x, y: y, type: 'heatmap',
+            colorscale: [['0.0', '#0f172a'], ['1.0', '#22d3ee']],
+            text: [['86 True Positives', '17 False Negatives'], ['29 False Positives', '136 True Negatives']],
+            texttemplate: "%{text}", 
+            textfont: { color: '#ffffff', size: 16 }
+        };
+
+        const layout = { 
+            ...darkLayoutConfig, 
+            title: { text: 'Confusion Matrix (Mock Data Demo)', font: { color: '#ffffff', size: 18 } }
+        };
+
+        Plotly.newPlot('confusionMatrixChart', [trace], layout, staticConfig);
+    }
+
+    function renderFeatureImportance(data) {
+        let validData = data.filter(d => d.Feature).sort((a,b) => a.Importance - b.Importance);
+
+        const trace = {
+            // Pre-rounding feature scores to 3 points
+            x: validData.map(d => roundTo3(d.Importance)),
+            y: validData.map(d => d.Feature),
+            type: 'bar', orientation: 'h',
+            marker: { color: '#fbbf24' },
+            text: validData.map(d => d.Importance.toFixed(3)),
+            textposition: 'outside',
+            cliponaxis: false,
+            textfont: { color: '#ffffff' }
+        };
+
+        const layout = { 
+            ...darkLayoutConfig, 
+            title: { text: 'Feature Importances', font: { color: '#ffffff', size: 18 } },
+            xaxis: { ...darkLayoutConfig.xaxis, title: 'Importance Score', range: [0, 0.6] }
+        };
+
+        Plotly.newPlot('featureImportanceChart', [trace], layout, staticConfig);
+    }
+
+    initDashboard();
+</script>
+</body>
+</html>

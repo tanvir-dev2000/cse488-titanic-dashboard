@@ -1,0 +1,4 @@
+Model,AUC_Score
+Logistic Regression,0.849290780141844
+Decision Tree,0.6241520197348135
+Random Forest,0.8924221399938329
